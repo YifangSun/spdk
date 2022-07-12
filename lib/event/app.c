@@ -228,7 +228,7 @@ spdk_app_opts_init(struct spdk_app_opts *opts, size_t opts_size)
 #undef SET_FIELD
 }
 
-static int
+int
 app_setup_signal_handlers(struct spdk_app_opts *opts)
 {
 	struct sigaction	sigact;
@@ -276,7 +276,7 @@ app_start_application(void)
 	g_start_fn(g_start_arg);
 }
 
-static void
+void
 app_start_rpc(int rc, void *arg1)
 {
 	if (rc) {
@@ -363,7 +363,7 @@ app_setup_env(struct spdk_app_opts *opts)
 	return rc;
 }
 
-static int
+int
 app_setup_trace(struct spdk_app_opts *opts)
 {
 	char		shm_name[64];
@@ -587,6 +587,26 @@ spdk_app_start(struct spdk_app_opts *opts_user, spdk_msg_fn start_fn,
 	g_env_was_setup = true;
 
 	return g_spdk_app.rc;
+}
+
+void 
+spdk_app_set_g_spdk_app(struct spdk_app_opts *opts) 
+{
+	memset(&g_spdk_app, 0, sizeof(g_spdk_app));
+	g_spdk_app.json_config_file = opts->json_config_file;
+	g_spdk_app.json_config_ignore_errors = opts->json_config_ignore_errors;
+	g_spdk_app.rpc_addr = opts->rpc_addr;
+	g_spdk_app.shm_id = opts->shm_id;
+	g_spdk_app.shutdown_cb = opts->shutdown_cb;
+	g_spdk_app.rc = 0;
+	g_spdk_app.stopped = false;
+}
+
+void 
+spdk_app_set_start_fn(spdk_msg_fn start_fn, void *arg1) 
+{
+	g_start_fn = start_fn;
+	g_start_arg = arg1;
 }
 
 void
