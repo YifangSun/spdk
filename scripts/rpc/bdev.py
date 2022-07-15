@@ -263,6 +263,18 @@ def syf_create(client, num_blocks, block_size, name=None, uuid=None):
         params['uuid'] = uuid
     return client.call('syf_create', params)
 
+def sdev_create(client, num_blocks, block_size, name=None, uuid=None):
+    params = {'num_blocks': num_blocks, 'block_size': block_size}
+    if name:
+        params['name'] = name
+    if uuid:
+        params['uuid'] = uuid
+    return client.call('sdev_create', params)
+
+
+def sdev_delete(client, name):
+    params = {'name': name}
+    return client.call('sdev_delete', params)
 
 @deprecated_alias('delete_malloc_bdev')
 def bdev_malloc_delete(client, name):

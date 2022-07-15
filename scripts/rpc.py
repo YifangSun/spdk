@@ -367,6 +367,30 @@ if __name__ == "__main__":
     p.add_argument('block_size', help='Block size for this bdev', type=int)
     p.set_defaults(func=syf_create)
 
+    def sdev_create(args):
+        num_blocks = (args.total_size * 1024 * 1024) // args.block_size
+        print_json(rpc.bdev.sdev_create(args.client,
+                                        num_blocks=int(num_blocks),
+                                        block_size=args.block_size,
+                                        name=args.name,
+                                        uuid=args.uuid))
+    p = subparsers.add_parser('sdev_create',
+                              help='Create a sdev')
+    p.add_argument('-b', '--name', help="Name of the bdev")
+    p.add_argument('-u', '--uuid', help="UUID of the bdev")
+    p.add_argument(
+        'total_size', help='Size of malloc bdev in MB (float > 0)', type=float)
+    p.add_argument('block_size', help='Block size for this bdev', type=int)
+    p.set_defaults(func=sdev_create)
+
+    def sdev_delete(args):
+        rpc.bdev.sdev_delete(args.client, name=args.name)
+
+    p = subparsers.add_parser('sdev_delete',
+                              help='Delete a malloc disk')
+    p.add_argument('name', help='malloc bdev name')
+    p.set_defaults(func=sdev_delete)
+
     def bdev_malloc_delete(args):
         rpc.bdev.bdev_malloc_delete(args.client,
                                     name=args.name)
