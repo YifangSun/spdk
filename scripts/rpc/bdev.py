@@ -243,6 +243,27 @@ def bdev_malloc_create(client, num_blocks, block_size, name=None, uuid=None):
     return client.call('bdev_malloc_create', params)
 
 
+@deprecated_alias('syf_create_alias')
+def syf_create(client, num_blocks, block_size, name=None, uuid=None):
+    """Construct a malloc block device.
+
+    Args:
+        num_blocks: size of block device in blocks
+        block_size: block size of device; must be a power of 2 and at least 512
+        name: name of block device (optional)
+        uuid: UUID of block device (optional)
+
+    Returns:
+        Name of created block device.
+    """
+    params = {'num_blocks': num_blocks, 'block_size': block_size}
+    if name:
+        params['name'] = name
+    if uuid:
+        params['uuid'] = uuid
+    return client.call('syf_create', params)
+
+
 @deprecated_alias('delete_malloc_bdev')
 def bdev_malloc_delete(client, name):
     """Delete malloc block device.

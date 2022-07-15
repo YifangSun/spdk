@@ -80,8 +80,13 @@ _get_rpc_method(const struct spdk_json_val *method)
 {
 	struct spdk_rpc_method *m;
 
+	if (method->type == SPDK_JSON_VAL_STRING && method->type == SPDK_JSON_VAL_NAME) {
+		printf("want method: %s\n", method->start);
+	}
+	
 	SLIST_FOREACH(m, &g_rpc_methods, slist) {
 		if (spdk_json_strequal(method, m->name)) {
+			printf("method: %s\n", m->name);
 			return m;
 		}
 	}
