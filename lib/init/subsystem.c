@@ -62,6 +62,7 @@ static struct spdk_thread *g_fini_thread = NULL;
 void
 spdk_add_subsystem(struct spdk_subsystem *subsystem)
 {
+	printf("[syf] subsystem register: %s\n", subsystem->name);
 	TAILQ_INSERT_TAIL(&g_subsystems, subsystem, tailq);
 }
 
@@ -184,6 +185,7 @@ spdk_subsystem_init_next(int rc)
 	}
 
 	if (g_next_subsystem->init) {
+		printf("[syf] subsystem init: %s\n", g_next_subsystem->name);
 		g_next_subsystem->init();
 	} else {
 		spdk_subsystem_init_next(0);

@@ -81,12 +81,10 @@ _get_rpc_method(const struct spdk_json_val *method)
 	struct spdk_rpc_method *m;
 
 	if (method->type == SPDK_JSON_VAL_STRING && method->type == SPDK_JSON_VAL_NAME) {
-		printf("want method: %s\n", method->start);
 	}
 	
 	SLIST_FOREACH(m, &g_rpc_methods, slist) {
 		if (spdk_json_strequal(method, m->name)) {
-			printf("method: %s\n", m->name);
 			return m;
 		}
 	}
@@ -116,6 +114,7 @@ jsonrpc_handler(struct spdk_jsonrpc_request *request,
 	assert(method != NULL);
 
 	m = _get_rpc_method(method);
+	printf("[syf] rpd handle method: %s\n", method->start);
 	if (m == NULL) {
 		spdk_jsonrpc_send_error_response(request, SPDK_JSONRPC_ERROR_METHOD_NOT_FOUND, "Method not found");
 		return;
@@ -227,6 +226,7 @@ spdk_rpc_register_method(const char *method, spdk_rpc_method_handler func, uint3
 {
 	struct spdk_rpc_method *m;
 
+	printf("[syf] rpc register: %s\n", method);
 	m = _get_rpc_method_raw(method);
 	if (m != NULL) {
 		SPDK_ERRLOG("duplicate RPC %s registered...\n", method);

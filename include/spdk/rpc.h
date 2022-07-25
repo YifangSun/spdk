@@ -124,7 +124,6 @@ int spdk_rpc_is_method_allowed(const char *method, uint32_t state_mask);
 #define SPDK_RPC_REGISTER(method, func, state_mask) \
 static void __attribute__((constructor(1000))) rpc_register_##func(void) \
 { \
-	printf("register: %s\n", #func); \
 	spdk_rpc_register_method(method, func, state_mask); \
 }
 

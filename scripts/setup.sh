@@ -446,6 +446,8 @@ configure_linux_hugepages() {
 	for node in /sys/devices/system/node/node*; do
 		[[ -e $node ]] || continue
 		nodes[${node##*node}]=$node/hugepages/hugepages-${HUGEPGSZ}kB/nr_hugepages
+		dir=$node/hugepages/hugepages-${HUGEPGSZ}kB/nr_hugepages
+		printf "%-6s %d\n" $dir $(cat ${dir})
 	done
 
 	IFS="," read -ra nodes_to_use <<< "$HUGENODE"
