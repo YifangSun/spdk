@@ -711,6 +711,62 @@ def bdev_zone_block_delete(client, name):
     params = {'name': name}
     return client.call('bdev_zone_block_delete', params)
 
+@deprecated_alias('construct_fastblock_bdev')
+def bdev_fastblock_create(client, pool_id, image_name, block_size, image_size, etcd_address, name=None, config=None, object_size=0):
+    """Create a fastblock image block device.
+
+    Args:
+        pool_id: fastblock pool id
+        image_name: fastblock image name
+        block_size: block size of RBD volume
+        image_size: image size 
+        object_size: object size
+        etcd_address: etcd_address
+        name: name of block device (optional)
+        config: map of config keys to values (optional)
+
+    Returns:
+        Name of created block device.
+    """
+    params = {
+        'pool_id': pool_id,
+        'image_name': image_name,
+        'block_size': block_size,
+        'image_size': image_size,
+        'object_size': object_size,
+        'etcd_address': etcd_address
+    }
+
+    if name:
+        params['name'] = name
+    if config is not None:
+        params['config'] = config
+
+    return client.call('bdev_fastblock_create', params)
+
+@deprecated_alias('delete_fastblock_bdev')
+def bdev_fastblock_delete(client, name):
+    """Remove fastblock bdev from the system.
+
+    Args:
+        name: name of fastblock bdev to delete
+    """
+    params = {'name': name}
+    return client.call('bdev_fastblock_delete', params)
+
+def bdev_fastblock_resize(client, name, new_size):
+    """Resize fastblock bdev in the system.
+
+    Args:
+        name: name of fastblock bdev to resize
+        new_size: new bdev size of resize operation. The unit is MiB
+    """
+    params = {
+            'name': name,
+            'new_size': new_size,
+            }
+    return client.call('bdev_fastblock_resize', params)
+
 
 def bdev_rbd_register_cluster(client, name, user=None, config_param=None, config_file=None):
     """Create a Rados Cluster object of the Ceph RBD backend.

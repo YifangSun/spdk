@@ -682,6 +682,65 @@ if __name__ == "__main__":
     p.add_argument('name', help='Virtual zone bdev name')
     p.set_defaults(func=bdev_zone_block_delete)
 
+    def bdev_fastblock_create(args):
+        config = None
+        if args.config:
+            config = {}
+            for entry in args.config:
+                parts = entry.split('=', 1)
+                if len(parts) != 2:
+                    raise Exception('--config %s not in key=value form' % entry)
+                config[parts[0]] = parts[1]
+        if args.object_size is None:
+            object_size = 0
+        else:
+            object_size = args.object_size
+        print_json(rpc.bdev.bdev_fastblock_create(args.client,
+                                            name=args.name,
+                                            config=config,
+                                            pool_id=args.pool_id,
+                                            image_name=args.image_name,
+                                            block_size=args.block_size,
+                                            image_size=args.image_size,
+                                            object_size=object_size,
+                                            etcd_address=args.etcd_address))
+
+    p = subparsers.add_parser('bdev_fastblock_create', aliases=['construct_fastblock_bdev'],
+                              help='Add a bdev with fastblock image backend')
+    p.add_argument('-b', '--name', help="Name of the bdev", required=False)
+    p.add_argument('--config', action='append', metavar='key=value',
+                   help="adds a key=value configuration option for rados_conf_set (default: rely on config file)")
+    p.add_argument('-s', '--object_size', help='object size', type=int)
+    p.add_argument('-p', '--pool_id', help='pool id', type=int)
+    p.add_argument('-i', '--image_name', help='image name')
+    p.add_argument('-k', '--block_size', help='image block size', type=int)
+    p.add_argument('-I', '--image_size', help='image size', type=int)
+    p.add_argument('-e', '--etcd_address', help='etcd address')
+    p.set_defaults(func=bdev_fastblock_create)
+
+    def bdev_fastblock_delete(args):
+        rpc.bdev.bdev_fastblock_delete(args.client,
+                                 name=args.name)
+
+    p = subparsers.add_parser('bdev_fastblock_delete', aliases=['delete_fastblock_bdev'],
+                              help='Delete a fastblock image bdev')
+    p.add_argument('name', help='fastblock bdev name')
+    p.set_defaults(func=bdev_fastblock_delete)
+
+    def bdev_fastblock_resize(args):
+        print_json(rpc.bdev.bdev_fastblock_resize(args.client,
+                                            name=args.name,
+                                            new_size=int(args.new_size)))
+        rpc.bdev.bdev_fastblock_resize(args.client,
+                                 name=args.name,
+                                 new_size=int(args.new_size))
+
+    p = subparsers.add_parser('bdev_fastblock_resize',
+                              help='Resize a fastblock image bdev')
+    p.add_argument('name', help='fastblock bdev name')
+    p.add_argument('new_size', help='new bdev size for resize operation. The unit is MiB')
+    p.set_defaults(func=bdev_fastblock_resize)
+
     def bdev_rbd_register_cluster(args):
         config_param = None
         if args.config_param:
