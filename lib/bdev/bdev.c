@@ -612,7 +612,9 @@ bdev_examine(struct spdk_bdev *bdev)
 	uint32_t action;
 
 	TAILQ_FOREACH(module, &g_bdev_mgr.bdev_modules, internal.tailq) {
+		printf("[syf] bdev_examine bdev_modules: %s examine_config\n", module->name);
 		if (module->examine_config && bdev_ok_to_examine(bdev)) {
+			printf("[syf] bdev_examine bdev_modules: %s do\n", module->name);
 			action = module->internal.action_in_progress;
 			module->internal.action_in_progress++;
 			module->examine_config(bdev);
@@ -632,7 +634,9 @@ bdev_examine(struct spdk_bdev *bdev)
 	}
 
 	TAILQ_FOREACH(module, &g_bdev_mgr.bdev_modules, internal.tailq) {
+		printf("[syf] bdev_examine bdev_modules: %s examine_disk\n", module->name);
 		if (module->examine_disk && bdev_ok_to_examine(bdev)) {
+			printf("[syf] bdev_examine bdev_modules: %s do\n", module->name);
 			module->internal.action_in_progress++;
 			module->examine_disk(bdev);
 		}
