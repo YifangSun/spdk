@@ -3756,16 +3756,20 @@ bdev_bytes_to_blocks(struct spdk_bdev *bdev, uint64_t offset_bytes, uint64_t *of
 	uint32_t block_size = bdev->blocklen;
 	uint8_t shift_cnt;
 
+	printf("[syf] bdev_bytes_to_blocks offset_bytes:%llu offset_blocks:%llu num_bytes:%llu num_blocks:%llu block_size:%u\n", 
+	                                   offset_bytes, *offset_blocks, num_bytes, *num_blocks, block_size);
 	/* Avoid expensive div operations if possible. These spdk_u32 functions are very cheap. */
 	if (spdk_likely(spdk_u32_is_pow2(block_size))) {
 		shift_cnt = spdk_u32log2(block_size);
 		*offset_blocks = offset_bytes >> shift_cnt;
 		*num_blocks = num_bytes >> shift_cnt;
+		printf("[syf] bdev_bytes_to_blocks 1 offset_blocks:%llu num_blocks:%llu shift_cnt:%u\n", *offset_blocks, *num_blocks, shift_cnt);
 		return (offset_bytes - (*offset_blocks << shift_cnt)) |
 		       (num_bytes - (*num_blocks << shift_cnt));
 	} else {
 		*offset_blocks = offset_bytes / block_size;
 		*num_blocks = num_bytes / block_size;
+		printf("[syf] bdev_bytes_to_blocks 2 offset_blocks:%llu num_blocks:%llu\n", *offset_blocks, *num_blocks);
 		return (offset_bytes % block_size) | (num_bytes % block_size);
 	}
 }
@@ -3881,6 +3885,7 @@ spdk_bdev_readv(struct spdk_bdev_desc *desc, struct spdk_io_channel *ch,
 
 	if (bdev_bytes_to_blocks(spdk_bdev_desc_get_bdev(desc), offset, &offset_blocks,
 				 nbytes, &num_blocks) != 0) {
+		printf("[syf] bdev_bytes_to_blocks fail\n");
 		return -EINVAL;
 	}
 
@@ -3917,6 +3922,7 @@ bdev_readv_blocks_with_md(struct spdk_bdev_desc *desc, struct spdk_io_channel *c
 	bdev_io_init(bdev_io, bdev, cb_arg, cb);
 	bdev_io->internal.ext_opts = opts;
 
+	printf("[syf] call bdev_io_submit\n");
 	bdev_io_submit(bdev_io);
 	return 0;
 }
@@ -3936,14 +3942,18 @@ spdk_bdev_readv_blocks_with_md(struct spdk_bdev_desc *desc, struct spdk_io_chann
 			       uint64_t offset_blocks, uint64_t num_blocks,
 			       spdk_bdev_io_completion_cb cb, void *cb_arg)
 {
+	printf("[syf] spdk_bdev_readv_blocks_with_md\n");
 	if (!spdk_bdev_is_md_separate(spdk_bdev_desc_get_bdev(desc))) {
+		printf("[syf] spdk_bdev_readv_blocks_with_md 1 return\n");
 		return -EINVAL;
 	}
 
 	if (!_bdev_io_check_md_buf(iov, md_buf)) {
+		printf("[syf] spdk_bdev_readv_blocks_with_md 2 return\n");
 		return -EINVAL;
 	}
 
+	printf("[syf] spdk_bdev_readv_blocks_with_md 3 call bdev_readv_blocks_with_md\n");
 	return bdev_readv_blocks_with_md(desc, ch, iov, iovcnt, md_buf, offset_blocks,
 					 num_blocks, cb, cb_arg, NULL);
 }

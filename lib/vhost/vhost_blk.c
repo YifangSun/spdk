@@ -462,6 +462,8 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 
 	iov = &task->iovs[0];
 	if (spdk_unlikely(iov->iov_len != sizeof(*req))) {
+		printf("[syf] First descriptor size is %zu but expected %zu (req_idx = %"PRIu16").\n",
+			      iov->iov_len, sizeof(*req), task->req_idx);
 		SPDK_DEBUGLOG(vhost_blk,
 			      "First descriptor size is %zu but expected %zu (req_idx = %"PRIu16").\n",
 			      iov->iov_len, sizeof(*req), task->req_idx);
@@ -473,6 +475,8 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 
 	iov = &task->iovs[task->iovcnt - 1];
 	if (spdk_unlikely(iov->iov_len != 1)) {
+		printf("[syf] Last descriptor size is %zu but expected %d (req_idx = %"PRIu16").\n",
+			      iov->iov_len, 1, task->req_idx);
 		SPDK_DEBUGLOG(vhost_blk,
 			      "Last descriptor size is %zu but expected %d (req_idx = %"PRIu16").\n",
 			      iov->iov_len, 1, task->req_idx);
@@ -490,11 +494,13 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 	/* Don't care about barier for now (as QEMU's virtio-blk do). */
 	type &= ~VIRTIO_BLK_T_BARRIER;
 #endif
-
+	printf("[syf] process_blk_request type:%d\n", type);
 	switch (type) {
 	case VIRTIO_BLK_T_IN:
 	case VIRTIO_BLK_T_OUT:
 		if (spdk_unlikely(payload_len == 0 || (payload_len & (512 - 1)) != 0)) {
+			printf("[syf] %s - passed IO buffer is not multiple of 512b (req_idx = %"PRIu16").\n",
+				    type ? "WRITE" : "READ", task->req_idx);
 			SPDK_ERRLOG("%s - passed IO buffer is not multiple of 512b (req_idx = %"PRIu16").\n",
 				    type ? "WRITE" : "READ", task->req_idx);
 			invalid_blk_request(task, VIRTIO_BLK_S_UNSUPP);
@@ -503,6 +509,8 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 
 		if (type == VIRTIO_BLK_T_IN) {
 			task->used_len = payload_len + sizeof(*task->status);
+			printf("[syf] VIRTIO_BLK_T_IN task->used_len:%d\n", task->used_len);
+			printf("[syf] VIRTIO_BLK_T_IN task->used_len:%d\n", task->used_len);
 			rc = spdk_bdev_readv(bvdev->bdev_desc, bvsession->io_channel,
 					     &task->iovs[1], task->iovcnt, req->sector * 512,
 					     payload_len, blk_request_complete_cb, task);
@@ -512,12 +520,14 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 					      &task->iovs[1], task->iovcnt, req->sector * 512,
 					      payload_len, blk_request_complete_cb, task);
 		} else {
+			printf("[syf] Device is in read-only mode!\n");
 			SPDK_DEBUGLOG(vhost_blk, "Device is in read-only mode!\n");
 			rc = -1;
 		}
 
 		if (rc) {
 			if (rc == -ENOMEM) {
+				printf("[syf] No memory, start to queue io.\n");
 				SPDK_DEBUGLOG(vhost_blk, "No memory, start to queue io.\n");
 				blk_request_queue_io(task);
 			} else {
@@ -529,12 +539,14 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 	case VIRTIO_BLK_T_DISCARD:
 		desc = task->iovs[1].iov_base;
 		if (payload_len != sizeof(*desc)) {
+			printf("[syf] Invalid discard payload size: %u\n", payload_len);
 			SPDK_NOTICELOG("Invalid discard payload size: %u\n", payload_len);
 			invalid_blk_request(task, VIRTIO_BLK_S_IOERR);
 			return -1;
 		}
 
 		if (desc->flags & VIRTIO_BLK_WRITE_ZEROES_FLAG_UNMAP) {
+			printf("[syf] UNMAP flag is only used for WRITE ZEROES command\n");
 			SPDK_ERRLOG("UNMAP flag is only used for WRITE ZEROES command\n");
 			invalid_blk_request(task, VIRTIO_BLK_S_UNSUPP);
 			return -1;
@@ -545,6 +557,7 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 				     blk_request_complete_cb, task);
 		if (rc) {
 			if (rc == -ENOMEM) {
+				printf("[syf] No memory, start to queue io.\n");
 				SPDK_DEBUGLOG(vhost_blk, "No memory, start to queue io.\n");
 				blk_request_queue_io(task);
 			} else {
@@ -556,6 +569,7 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 	case VIRTIO_BLK_T_WRITE_ZEROES:
 		desc = task->iovs[1].iov_base;
 		if (payload_len != sizeof(*desc)) {
+			printf("[syf] Invalid write zeroes payload size: %u\n", payload_len);
 			SPDK_NOTICELOG("Invalid write zeroes payload size: %u\n", payload_len);
 			invalid_blk_request(task, VIRTIO_BLK_S_IOERR);
 			return -1;
@@ -566,6 +580,8 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 		 * just print a warning.
 		 */
 		if (desc->flags & VIRTIO_BLK_WRITE_ZEROES_FLAG_UNMAP) {
+			printf("[syf] Ignore the unmap flag for WRITE ZEROES from %"PRIx64", len %"PRIx64"\n",
+				     (uint64_t)desc->sector * 512, (uint64_t)desc->num_sectors * 512);
 			SPDK_WARNLOG("Ignore the unmap flag for WRITE ZEROES from %"PRIx64", len %"PRIx64"\n",
 				     (uint64_t)desc->sector * 512, (uint64_t)desc->num_sectors * 512);
 		}
@@ -575,6 +591,7 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 					    blk_request_complete_cb, task);
 		if (rc) {
 			if (rc == -ENOMEM) {
+				printf("[syf] No memory, start to queue io.\n");
 				SPDK_DEBUGLOG(vhost_blk, "No memory, start to queue io.\n");
 				blk_request_queue_io(task);
 			} else {
@@ -586,6 +603,7 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 	case VIRTIO_BLK_T_FLUSH:
 		flush_bytes = spdk_bdev_get_num_blocks(bvdev->bdev) * spdk_bdev_get_block_size(bvdev->bdev);
 		if (req->sector != 0) {
+			printf("[syf] sector must be zero for flush command\n");
 			SPDK_NOTICELOG("sector must be zero for flush command\n");
 			invalid_blk_request(task, VIRTIO_BLK_S_IOERR);
 			return -1;
@@ -595,6 +613,7 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 				     blk_request_complete_cb, task);
 		if (rc) {
 			if (rc == -ENOMEM) {
+				printf("[syf] No memory, start to queue io.\n");
 				SPDK_DEBUGLOG(vhost_blk, "No memory, start to queue io.\n");
 				blk_request_queue_io(task);
 			} else {
@@ -614,6 +633,7 @@ process_blk_request(struct spdk_vhost_blk_task *task,
 		blk_request_finish(true, task);
 		break;
 	default:
+		printf("[syf] Not supported request type '%"PRIu32"'.\n", type);
 		SPDK_DEBUGLOG(vhost_blk, "Not supported request type '%"PRIu32"'.\n", type);
 		invalid_blk_request(task, VIRTIO_BLK_S_UNSUPP);
 		return -1;

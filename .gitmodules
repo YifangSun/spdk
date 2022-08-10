@@ -1,15 +1,15 @@
 [submodule "dpdk"]
 	path = dpdk
-	url = https://github.com/spdk/dpdk.git
+	url = http://172.20.2.149/sunyifang/dpdk.git
 [submodule "intel-ipsec-mb"]
 	path = intel-ipsec-mb
-	url = https://github.com/spdk/intel-ipsec-mb.git
+	url = http://172.20.2.149/sunyifang/intel-ipsec-mb.git
 [submodule "isa-l"]
 	path = isa-l
-	url = https://github.com/spdk/isa-l.git
+	url = http://172.20.2.149/sunyifang/isa-l.git
 [submodule "ocf"]
 	path = ocf
-	url = https://github.com/Open-CAS/ocf.git
+	url = http://172.20.2.149/sunyifang/ocf.git
 [submodule "libvfio-user"]
 	path = libvfio-user
-	url = https://github.com/nutanix/libvfio-user.git
+	url = http://172.20.2.149/sunyifang/libvfio-user.git
