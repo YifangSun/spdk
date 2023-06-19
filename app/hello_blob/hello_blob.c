@@ -41,6 +41,10 @@
 #include "spdk/log.h"
 #include "spdk/string.h"
 
+#define MAX_BLOB_NUM 12800
+#define BLOB_CLUSTERS 4
+#define WRITE_UNITS 8096
+
 /*
  * We'll use this struct to gather housekeeping hello_context to pass between
  * our events and callbacks.
@@ -49,13 +53,123 @@ struct hello_context_t {
 	struct spdk_blob_store *bs;
 	struct spdk_blob *blob;
 	spdk_blob_id blobid;
+
+	struct spdk_blob* blobs[MAX_BLOB_NUM + 2];
+	spdk_blob_id 	  blobids[MAX_BLOB_NUM + 2];
+
+	struct spdk_blob* snapblobs[MAX_BLOB_NUM + 2];
+    spdk_blob_id 	  snapids[MAX_BLOB_NUM + 2];
+
 	struct spdk_io_channel *channel;
 	uint8_t *read_buff;
 	uint8_t *write_buff;
+	size_t  write_units;
 	uint64_t io_unit_size;
 	char* bdev_name;
+	int blob_num;
 	int rc;
 };
+
+struct delete_snap_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct close_snap_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct write_snap_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct open_snap_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct create_snap_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct clone_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct write_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct close_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct open_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct delete_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+struct create_ctx_t {
+	struct hello_context_t* hello_ctx;
+	int idx;
+	int max;
+	uint64_t start, end;
+};
+
+
+static inline double env_ticks_to_secs(uint64_t j)
+{
+	return (double)j / spdk_get_ticks_hz();
+}
+
+static inline double env_ticks_to_msecs(uint64_t j)
+{
+	return env_ticks_to_secs(j) * 1000;
+}
+
+static inline double env_ticks_to_usecs(uint64_t j)
+{
+	return env_ticks_to_secs(j) * 1000 * 1000;
+}
+
+static void
+write_blob_iterates(struct hello_context_t *hello_context);
+
+
+uint64_t create_blob_tsc, create_snap_tsc;
+
+uint64_t write_blob_tsc, write_snap_tsc;
 
 /*
  * Free up memory that we allocated.
@@ -362,6 +476,478 @@ create_blob(struct hello_context_t *hello_context)
 	spdk_bs_create_blob(hello_context->bs, blob_create_complete, hello_context);
 }
 
+/****************************************************/
+static void
+delete_blob_continue(void *arg1, int bserrno) {
+	struct delete_ctx_t *ctx = arg1;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in delete completion",
+			  bserrno);
+		return;
+	}
+
+    // SPDK_NOTICELOG("deleted %d blob id:%" PRIu64 " \n", 
+    //             ctx->idx, hello_context->blobids[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+		spdk_bs_delete_blob(hello_context->bs, hello_context->blobids[ctx->idx],
+			    delete_blob_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("delete %d blobs, time: %lf\n", ctx->idx, us);
+
+		// close_snap_iterates(hello_context);
+		unload_bs(hello_context, "", 0);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+delete_blob_iterates(struct hello_context_t *hello_context) {
+	struct delete_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct delete_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+
+	spdk_bs_delete_blob(hello_context->bs, hello_context->blobids[ctx->idx],
+			    delete_blob_continue, ctx);
+}
+
+
+static void
+close_blob_continue(void *arg1, int bserrno) {
+	struct close_ctx_t *ctx = arg1;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in close completion",
+			  bserrno);
+		return;
+	}
+
+    // SPDK_NOTICELOG("close %d blobid:%" PRIu64 " \n", 
+    //         ctx->idx, hello_context->blobids[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+		spdk_blob_close(hello_context->blobs[ctx->idx], close_blob_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("close %d blobs, time: %lf\n", ctx->idx, us);
+
+		delete_blob_iterates(hello_context);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+close_blob_iterates(struct hello_context_t *hello_context) {
+	struct close_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct close_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+
+	spdk_blob_close(hello_context->blobs[ctx->idx], close_blob_continue, ctx);
+}
+
+
+/****************************************/
+static void
+delete_snap_continue(void *arg1, int bserrno) {
+	struct delete_snap_ctx_t *ctx = arg1;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in delete snapshot completion",
+			  bserrno);
+		return;
+	}
+
+    // SPDK_NOTICELOG("deleted %d snap id:%" PRIu64 " \n", 
+    //             ctx->idx, hello_context->snapids[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+		spdk_bs_delete_blob(hello_context->bs, hello_context->snapids[ctx->idx],
+			    delete_snap_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("delete %d snapshots, time: %lf\n", ctx->idx, us);
+
+		// unload_bs(hello_context, "", 0);
+		close_blob_iterates(hello_context);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+delete_snap_iterates(struct hello_context_t *hello_context) {
+	struct delete_snap_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct delete_snap_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+
+	spdk_bs_delete_blob(hello_context->bs, hello_context->snapids[ctx->idx],
+			    delete_snap_continue, ctx);
+}
+
+static void
+close_snap_continue(void *arg1, int bserrno) {
+	struct close_snap_ctx_t *ctx = arg1;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in close snapshot completion",
+			  bserrno);
+		return;
+	}
+
+    // SPDK_NOTICELOG("close %d snap id:%" PRIu64 " \n", 
+    //         ctx->idx, hello_context->snapids[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+		spdk_blob_close(hello_context->snapblobs[ctx->idx], close_snap_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("close %d snapshots, time: %lf\n", ctx->idx, us);
+
+		delete_snap_iterates(hello_context);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+close_snap_iterates(struct hello_context_t *hello_context) {
+	struct close_snap_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct close_snap_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+
+	spdk_blob_close(hello_context->snapblobs[ctx->idx], close_snap_continue, ctx);
+}
+
+/***********************************/
+
+static void
+rewrite_blob_continue(void *arg1, int bserrno) {
+	struct write_ctx_t *ctx = arg1;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in rewrite blob completion",
+			  bserrno);
+		return;
+	}
+
+    // SPDK_NOTICELOG("writed %d blob id:%" PRIu64 " \n", 
+    //         ctx->idx, hello_context->blobids[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+
+		spdk_blob_io_write(hello_context->blobs[ctx->idx], hello_context->channel,
+			   hello_context->write_buff,
+			   0, 2, rewrite_blob_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("rewrite %d blob, time: %lf\n", ctx->idx, us);
+
+		close_snap_iterates(hello_context);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+rewrite_blob_iterates(struct hello_context_t *hello_context) {
+	struct write_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct write_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+
+	spdk_blob_io_write(hello_context->blobs[ctx->idx], hello_context->channel,
+			   hello_context->write_buff,
+			   0, 2, rewrite_blob_continue, ctx);
+}
+
+
+static void
+open_snap_continue(void *cb_arg, struct spdk_blob *blob, int bserrno) {
+	struct open_snap_ctx_t *ctx = cb_arg;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in open snapshot completion",
+			  bserrno);
+		return;
+	}
+
+	hello_context->snapblobs[ctx->idx] = blob;
+    // SPDK_NOTICELOG("opened %d snapshot id:%" PRIu64 " \n", 
+    //         ctx->idx, hello_context->snapids[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+		spdk_bs_open_blob(hello_context->bs, hello_context->snapids[ctx->idx],
+			  open_snap_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("opened %d snapshots, time: %lf\n", ctx->idx, us);
+
+		rewrite_blob_iterates(hello_context);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+open_snap_iterates(struct hello_context_t *hello_context) {
+	struct open_snap_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct open_snap_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+
+	spdk_bs_open_blob(hello_context->bs, hello_context->snapids[ctx->idx],
+			  open_snap_continue, ctx);
+}
+
+
+static void
+create_snap_continue(void *arg1, spdk_blob_id blobid, int bserrno) {
+	struct create_snap_ctx_t *ctx = arg1;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in blob create snapshot callback",
+				bserrno);
+		return;
+	}
+
+	hello_context->snapids[ctx->idx] = blobid;
+    // SPDK_NOTICELOG("created snapshot %d blob id:%" PRIu64 "\n", ctx->idx, 
+    //         hello_context->snaps[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+
+		spdk_bs_create_snapshot(hello_context->bs, hello_context->blobids[ctx->idx],
+			     NULL, create_snap_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("create %d snapshots, time: %lf\n", ctx->idx, us);
+
+		open_snap_iterates(hello_context);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+create_snap_iterates(struct hello_context_t *hello_context) {
+	struct create_snap_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct create_snap_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+
+	spdk_bs_create_snapshot(hello_context->bs, hello_context->blobids[ctx->idx],
+             NULL, create_snap_continue, ctx);
+}
+
+
+/*****************************************************/
+
+static void
+write_blob_continue(void *arg1, int bserrno) {
+	struct write_ctx_t *ctx = arg1;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in write blob completion",
+			  bserrno);
+		return;
+	}
+
+    // SPDK_NOTICELOG("writed %d blob id:%" PRIu64 " \n", 
+    //         ctx->idx, hello_context->blobids[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+
+		spdk_blob_io_write(hello_context->blobs[ctx->idx], hello_context->channel,
+			   hello_context->write_buff,
+			   0, 2, write_blob_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("write %d blob, time: %lf\n", ctx->idx, us);
+
+		create_snap_iterates(hello_context);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+write_blob_iterates(struct hello_context_t *hello_context) {
+	struct write_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct write_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+    hello_context->channel = spdk_bs_alloc_io_channel(hello_context->bs);
+    hello_context->write_buff = spdk_malloc(512 * WRITE_UNITS,
+                    0x1000, NULL, SPDK_ENV_LCORE_ID_ANY,
+                    SPDK_MALLOC_DMA);
+    memset(hello_context->write_buff, 0x5a, 512 * WRITE_UNITS);
+
+	spdk_blob_io_write(hello_context->blobs[ctx->idx], hello_context->channel,
+			   hello_context->write_buff,
+			   0, 2, write_blob_continue, ctx);
+}
+
+
+static void
+open_blob_continue(void *cb_arg, struct spdk_blob *blob, int bserrno) {
+	struct open_ctx_t *ctx = cb_arg;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in open completion",
+			  bserrno);
+		return;
+	}
+
+	hello_context->blobs[ctx->idx] = blob;
+    // SPDK_NOTICELOG("opened %d blob id:%" PRIu64 " \n", 
+    //         ctx->idx, hello_context->blobids[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+		spdk_bs_open_blob(hello_context->bs, hello_context->blobids[ctx->idx],
+			  open_blob_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("opened %d blob, time: %lf\n", ctx->idx, us);
+
+		write_blob_iterates(hello_context);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+open_blob_iterates(struct hello_context_t *hello_context) {
+	struct open_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct open_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+
+	spdk_bs_open_blob(hello_context->bs, hello_context->blobids[ctx->idx],
+			  open_blob_continue, ctx);
+}
+
+
+static void
+create_blob_continue(void *arg1, spdk_blob_id blobid, int bserrno) {
+	struct create_ctx_t *ctx = arg1;
+	struct hello_context_t *hello_context = ctx->hello_ctx;
+
+	if (bserrno) {
+		unload_bs(hello_context, "Error in blob create callback",
+				bserrno);
+		return;
+	}
+
+	hello_context->blobids[ctx->idx] = blobid;
+    // SPDK_NOTICELOG("created %d blob id:%" PRIu64 "\n", ctx->idx, 
+    //         hello_context->blobids[ctx->idx]);
+
+	if (ctx->idx < ctx->max) {
+		ctx->idx++;
+
+		struct spdk_blob_opts opts;
+		spdk_blob_opts_init(&opts, sizeof(opts));
+		opts.num_clusters = BLOB_CLUSTERS;
+		spdk_bs_create_blob_ext(hello_context->bs, &opts, create_blob_continue, ctx);
+	} else {
+		uint64_t now = spdk_get_ticks();
+		double us = env_ticks_to_usecs(now - ctx->start);
+		SPDK_NOTICELOG("created %d blob, time: %lf\n", ctx->idx, us);
+
+		open_blob_iterates(hello_context);
+		free(ctx);
+		// spdk_app_stop(-1);
+	}
+}
+
+static void
+create_blob_iterates(struct hello_context_t *hello_context) {
+	struct create_ctx_t *ctx = NULL;
+
+	ctx = calloc(1, sizeof(struct create_ctx_t));
+	ctx->hello_ctx = hello_context;
+	ctx->idx = 0;
+	ctx->max = MAX_BLOB_NUM;
+	ctx->end = 0;
+	ctx->start = spdk_get_ticks();
+
+	struct spdk_blob_opts opts;
+	spdk_blob_opts_init(&opts, sizeof(opts));
+	opts.num_clusters = BLOB_CLUSTERS;
+	spdk_bs_create_blob_ext(hello_context->bs, &opts, create_blob_continue, ctx);
+}
+
 /*
  * Callback function for initializing the blobstore.
  */
@@ -370,6 +956,7 @@ bs_init_complete(void *cb_arg, struct spdk_blob_store *bs,
 		 int bserrno)
 {
 	struct hello_context_t *hello_context = cb_arg;
+    uint64_t free = 0;
 
 	SPDK_NOTICELOG("entry\n");
 	if (bserrno) {
@@ -385,14 +972,10 @@ bs_init_complete(void *cb_arg, struct spdk_blob_store *bs,
 	 * so we'll just save it in out context buffer here.
 	 */
 	hello_context->io_unit_size = spdk_bs_get_io_unit_size(hello_context->bs);
+    free = spdk_bs_free_cluster_count(hello_context->bs);
+    SPDK_NOTICELOG("blobstore has FREE clusters of %" PRIu64 "\n", free);
 
-	/*
-	 * The blobstore has been initialized, let's create a blob.
-	 * Note that we could pass a message back to ourselves using
-	 * spdk_thread_send_msg() if we wanted to keep our processing
-	 * time limited.
-	 */
-	create_blob(hello_context);
+	create_blob_iterates(hello_context);
 }
 
 static void
@@ -481,8 +1064,10 @@ main(int argc, char **argv)
 		 * hello_start() returns), or if an error occurs during
 		 * spdk_app_start() before hello_start() runs.
 		 */
+		hello_context->channel = NULL;
+		hello_context->blob_num = 0;
 		hello_context->bdev_name = argv[2];
-		SPDK_NOTICELOG("bdev name:%s\n", hello_context->bdev_name);
+		SPDK_WARNLOG("bdev name:%s\n", hello_context->bdev_name);
 		rc = spdk_app_start(&opts, hello_start, hello_context);
 		if (rc) {
 			SPDK_NOTICELOG("ERROR!\n");
@@ -490,13 +1075,13 @@ main(int argc, char **argv)
 			SPDK_NOTICELOG("SUCCESS!\n");
 		}
 		/* Free up memory that we allocated */
-		hello_cleanup(hello_context);
+		
 	} else {
 		SPDK_ERRLOG("Could not alloc hello_context struct!!\n");
 		rc = -ENOMEM;
 	}
-
 	/* Gracefully close out all of the SPDK subsystems. */
 	spdk_app_fini();
+	hello_cleanup(hello_context);
 	return rc;
 }

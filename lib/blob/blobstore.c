@@ -7082,6 +7082,7 @@ bs_delete_open_cpl(void *cb_arg, struct spdk_blob *blob, int bserrno)
 	bool update_clone = false;
 
 	if (bserrno != 0) {
+		SPDK_NOTICELOG("syf fail errno != 0 \n");
 		bs_sequence_finish(seq, bserrno);
 		return;
 	}
@@ -7090,6 +7091,7 @@ bs_delete_open_cpl(void *cb_arg, struct spdk_blob *blob, int bserrno)
 
 	ctx = calloc(1, sizeof(*ctx));
 	if (ctx == NULL) {
+		SPDK_NOTICELOG("syf fail ctx == NULL \n");
 		spdk_blob_close(blob, bs_delete_enomem_close_cpl, seq);
 		return;
 	}
@@ -7101,12 +7103,13 @@ bs_delete_open_cpl(void *cb_arg, struct spdk_blob *blob, int bserrno)
 	/* Check if blob can be removed and if it is a snapshot with clone on top of it */
 	ctx->bserrno = bs_is_blob_deletable(blob, &update_clone);
 	if (ctx->bserrno) {
+		SPDK_NOTICELOG("syf fail bs_is_blob_deletable \n");
 		spdk_blob_close(blob, delete_blob_cleanup_finish, ctx);
 		return;
 	}
 
 	if (blob->locked_operation_in_progress) {
-		SPDK_DEBUGLOG(blob, "Cannot remove blob - another operation in progress\n");
+		SPDK_NOTICELOG("Cannot remove blob - another operation in progress\n");
 		ctx->bserrno = -EBUSY;
 		spdk_blob_close(blob, delete_blob_cleanup_finish, ctx);
 		return;
@@ -7122,6 +7125,7 @@ bs_delete_open_cpl(void *cb_arg, struct spdk_blob *blob, int bserrno)
 	RB_REMOVE(spdk_blob_tree, &blob->bs->open_blobs, blob);
 
 	if (update_clone) {
+		// SPDK_NOTICELOG("syf fail update_clone \n");
 		ctx->page = spdk_zmalloc(SPDK_BS_PAGE_SIZE, 0, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 		if (!ctx->page) {
 			ctx->bserrno = -ENOMEM;
